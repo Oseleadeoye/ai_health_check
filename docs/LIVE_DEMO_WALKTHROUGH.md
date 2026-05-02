@@ -158,7 +158,7 @@ Keep ONE terminal visible with backend logs. The examiner may glance at it; you 
 
 ### Warm the LLM
 
-Before the grader arrives, hit Dashboard once and click "Generate insight" (or any action that triggers a Claude call). Establishes the DNS + TLS connection so the demo call isn't cold.
+Before the grader arrives, hit Dashboard once and click "Generate insight" (or any action that triggers a the AI call). Establishes the DNS + TLS connection so the demo call isn't cold.
 
 ---
 
@@ -220,7 +220,7 @@ Target ~6.5 min, max 12 min. Terminal visible at all times. If you need to show 
 
 **Where it bites you live:**
 - **The eval takes 5–15 seconds.** Dead air on stage.
-- **Claude might score well enough to NOT trigger drift.** You run the demo eval hoping for a failure — and get 85 %.
+- **the AI might score well enough to NOT trigger drift.** You run the demo eval hoping for a failure — and get 85 %.
 - **Budget may have been consumed.** 402 response if today's $5 budget is spent.
 - **If the service is confidential**, the eval requires admin override — handled by the modal, pass through cleanly.
 
@@ -523,7 +523,7 @@ uvicorn app.main:app --port 8000
 
 Then reload the browser tab and log in again. You'll lose any state generated during the previous demo attempt, but you're back to the pre-seeded baseline in under a minute.
 
-### Claude API rate-limited or budget exceeded
+### the AI API rate-limited or budget exceeded
 
 - Stay calm. Say: *"We've hit today's $5 budget cap — which is a governance feature, not a bug. The app refuses to exceed the cap."*
 - Pivot to the pre-seeded drift alert (Dashboard has it already) and narrate the compliance export path instead.
@@ -540,7 +540,7 @@ cd frontend && npm run dev
 
 ### Network is down (venue wifi failed)
 
-- Local demo still works — everything runs on localhost except Claude API calls.
+- Local demo still works — everything runs on localhost except the AI API calls.
 - You can still show: Dashboard, Services, Evaluations (no live run), Incidents (no generate-summary), Governance (including audit log verify), compliance export.
 - Skip steps 3 and 6 from the walkthrough. Pre-seeded drift covers you.
 
@@ -581,7 +581,7 @@ For deep individual-Q&A practice, read [VIVA_QA_PREP](VIVA_QA_PREP.md) — 10 ha
 
 **"Can the audit log be tampered with?"** → Direct DB write is theoretically possible since we're on SQLite, but the SHA-256 hash chain detects it on next verify. Production should use Postgres with row-level WORM permissions. Documented as R9 residual.
 
-**"What's the biggest remaining risk?"** → Pick one and go deep. Good answer: *"Judge refusals. LLM-as-judge is non-deterministic. If Claude's refusal behaviour shifts globally, a large fraction of our evals could become `judge_refused` and the drift signal weakens. We handle it by excluding refused rows from the aggregate — but the quality signal gets noisier, not wrong. That's why the maintenance runbook has a monthly check on refusal rate."*
+**"What's the biggest remaining risk?"** → Pick one and go deep. Good answer: *"Judge refusals. LLM-as-judge is non-deterministic. If the AI's refusal behaviour shifts globally, a large fraction of our evals could become `judge_refused` and the drift signal weakens. We handle it by excluding refused rows from the aggregate — but the quality signal gets noisier, not wrong. That's why the maintenance runbook has a monthly check on refusal rate."*
 
 ---
 

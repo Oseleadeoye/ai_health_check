@@ -18,20 +18,20 @@ demo day. Examiners respect accuracy over enthusiasm.
 
 ---
 
-## 1. LLM-as-judge is circular — Claude grading Claude
+## 1. LLM-as-judge is circular — the AI grading the AI
 
 **What we claim.** `score_factuality()` and `detect_hallucination()`
 produce quality scores that power drift detection.
 [EVAL_DATASET_CARD.md](EVAL_DATASET_CARD.md) calls it "LLM-as-judge
 pattern" — implies rigor.
 
-**What it actually is.** Claude scoring Claude's own output. If Claude has
+**What it actually is.** the AI scoring the AI's own output. If the AI has
 a systematic blind spot (subtle hallucinations, confident-wrong answers on
 math, agreement bias from RLHF), the judge shares that blind spot and the
 drift detector never sees it. The whole evaluation loop is a self-reference.
 
 **What the professor will ask.**
-- Why do you trust Claude to grade its own homework?
+- Why do you trust the AI to grade its own homework?
 - What's the inter-rater agreement between your judge and a human annotator?
 - Have you tested your judge on a held-out set where you know the true answer?
 
@@ -39,7 +39,7 @@ drift detector never sees it. The whole evaluation loop is a self-reference.
 cross-model validation (e.g. Haiku or GPT-4 as second judge), no
 calibration data. If the judge misbehaves, drift detection misbehaves too
 — silently. The `judge_refused` handling is a symptom-mitigation; the root
-problem (Claude's own biases propagating into our governance signal) is
+problem (the AI's own biases propagating into our governance signal) is
 unaddressed.
 
 **Recovery move for viva.** *"Production would need a second-model judge
@@ -204,14 +204,14 @@ limit) that the UI can render as toasts or error cards.
 **What it was.** `generate_summary`, `generate_dashboard_insight`,
 and `generate_compliance_summary` all ended with `except Exception as e:`
 that caught `CallLimitExceeded`, `PromptSafetyError`, and every
-Anthropic error, then returned the error string *inside the draft
+the LLM provider error, then returned the error string *inside the draft
 field* (`"Error generating summary: budget exceeded..."`, etc.). The
 HITL approver saw this as draft content, not as an error.
 
 **What we ship now.** The three synthesis functions split the exception
 handler: `CallLimitExceeded` and `PromptSafetyError` re-raise so the
 global FastAPI handler in `main.py` maps them to HTTP 402/413/422/429.
-Only generic `Exception` (transient Anthropic 5xx after retries,
+Only generic `Exception` (transient the LLM provider 5xx after retries,
 network blips) falls back to the error-in-draft text, so a flaky
 upstream doesn't break the HITL flow entirely. Six tests in
 `test_synthesis_reraises.py` guard both contracts.
@@ -271,7 +271,7 @@ ground truth and score them 0-100.
 actor's response exactly matches `expected_output` (after `.strip()`),
 the case is scored 100 *without calling the judge*. This is an
 intentional cost optimisation — a judge call on a perfect response
-would just confirm 100 and waste a Claude round-trip. But it means the
+would just confirm 100 and waste a the AI round-trip. But it means the
 judge's observed distribution is systematically biased away from easy
 wins. Haiku only ever sees the *hard* cases (where actor disagreed
 with ground truth). If the judge misclassifies easy cases (e.g. giving
@@ -364,8 +364,8 @@ Read the README's "Key Features" list and the demo walkthrough's
 | "Tamper-evident audit log" | "in-app tamper detection via hash chain" |
 | "Human-in-the-loop approval" | "forced-deliberation approval with mandatory reviewer note" |
 | "Drift detection with trend + variance + confidence" | "drift heuristics — threshold + split-half trend at low N" |
-| "LLM-as-judge evaluation" | "LLM judges another Claude output — with known circularity limitation" |
-| "Budget + safety errors return structured HTTP codes" | "structured HTTP codes from all LLM paths after commit `232d944` — budget / safety errors re-raise to the global handler; only transient Anthropic failures fall back to draft-with-error text" |
+| "LLM-as-judge evaluation" | "LLM judges another the AI output — with known circularity limitation" |
+| "Budget + safety errors return structured HTTP codes" | "structured HTTP codes from all LLM paths after commit `232d944` — budget / safety errors re-raise to the global handler; only transient the LLM provider failures fall back to draft-with-error text" |
 | "PII detection in prompt safety scanner" | "PII *flagging* in the safety scanner; the raw text still lands in `APIUsageLog` unredacted" |
 | "LLM-as-judge on every factuality test case" | "LLM-as-judge on every *non-trivial* factuality case — exact matches short-circuit and skip the judge" |
 

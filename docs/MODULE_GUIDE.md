@@ -1,6 +1,6 @@
 # AI Health Check -- Module Guide
 
-> Last updated: 2026-04-18 · current as of commit `3396e21`
+> Last updated: 2026-05-02 · current as of commit `HEAD`
 
 This document breaks down each module: what was built, who owns it, the key files, and how they connect. Use this to prepare for the individual Q&A.
 
@@ -11,7 +11,7 @@ For system-wide architecture, database models, and configuration, see [ARCHITECT
 | Module | Owner | Scope |
 |--------|-------|-------|
 | M1: Service Registry & Connection | Jack | Service catalog, health check scheduling, connection testing |
-| M2: Monitoring Dashboard & Evaluation | Sakir | Dashboard metrics, eval harness, drift detection |
+| M2: Monitoring Dashboard & Evaluation | Sakir | Dashboard metrics, eval harness (Factuality, Semantic, PII), drift detection |
 | M3: Incident Triage & Maintenance Planner | Osele | Incident lifecycle, LLM summaries, maintenance planning |
 | M4: Governance, Security & Compliance | Jeewanjot | Audit logging, compliance reports, user management |
 | Cross-cutting | Shared | Safety scanner, SSRF guard, sensitivity label enforcement, concurrency-safe budget enforcement, tamper-evident audit chain, shared HITL draft service, login throttling, LLM call tracing, alert system, design system |
@@ -26,8 +26,9 @@ For system-wide architecture, database models, and configuration, see [ARCHITECT
 
 - Provides a CRUD catalog of registered AI services (name, owner, endpoint, environment, model, sensitivity label)
 - Runs scheduled health checks every 5 minutes via APScheduler using HTTP probes (no LLM API consumption)
-- Supports on-demand connection testing in two modes: HTTP endpoint probe or Claude API health check
+- Supports on-demand connection testing in two modes: HTTP endpoint probe or AI model health check
 - Records all connection results in `ConnectionLog` for latency tracking and dashboard metrics
+- **Auto-provisioning**: Newly registered services are automatically seeded with a 6-test-case evaluation suite (Factuality, JSON, DAN Jailbreak, PII Leakage, Instruction Following)
 
 ### Key Files
 
@@ -74,13 +75,14 @@ For system-wide architecture, database models, and configuration, see [ARCHITECT
 
 - Aggregates fleet-wide metrics: active service count, average latency, error rate, average quality score
 - Computes P50/P95/P99 latency percentiles from connection logs and API usage data
-- Runs evaluation harness: executes test cases against Claude, scores responses (factuality via LLM-as-judge, format via JSON parse), and runs hallucination detection on factuality cases
+- Runs evaluation harness: executes test cases against the model, scores responses (Factuality via LLM-as-judge, Semantic Similarity via TF-IDF, PII Safe via regex, and Format via JSON parse), and runs hallucination detection on factuality cases
 - Detects model drift with severity classification (none/warning/critical), trend analysis (improving/declining/stable), and confidence scoring
 - Provides per-test-case drift breakdown with historical score tracking
 - Generates AI-powered dashboard insights summarizing platform health
 - Traces LLM calls with full prompt/response storage for auditability
 - Aggregates cost-by-service for monthly spend analysis
 - Manages alerts auto-created on drift, with acknowledge workflow
+- **Safety Scanner Bypass**: Evaluation harness automatically bypasses the input safety scanner for authorized test cases (enabling resilience testing against DAN/Injection)
 
 ### Key Files
 
@@ -92,7 +94,7 @@ For system-wide architecture, database models, and configuration, see [ARCHITECT
 | `backend/app/models/__init__.py` | `EvalTestCase`, `EvalRun`, `EvalResult`, `Telemetry`, `APIUsageLog` models |
 | `frontend/src/pages/DashboardPage.jsx` | Dashboard UI with metric cards, trend charts, drift alerts |
 | `frontend/src/pages/EvaluationsPage.jsx` | Eval harness UI with test case management and run history |
-| `frontend/src/pages/SettingsPage.jsx` | API config, budget monitoring, Claude health check |
+| `frontend/src/pages/SettingsPage.jsx` | API config, budget monitoring, the AI health check |
 | `frontend/src/components/evaluations/DriftAnalysis.jsx` | Drift visualization with severity indicators |
 | `frontend/src/components/evaluations/EvalRunsSection.jsx` | Eval run history listing |
 | `frontend/src/components/evaluations/TestCasesSection.jsx` | Test case management |
@@ -108,7 +110,7 @@ For system-wide architecture, database models, and configuration, see [ARCHITECT
 | GET | `/api/v1/dashboard/recent-evals` | Last 10 evaluation runs |
 | GET | `/api/v1/dashboard/drift-alerts` | Drift-flagged runs from last 7 days |
 | POST | `/api/v1/dashboard/ai-summary` | LLM-generated platform health summary (admin/maintainer) |
-| GET | `/api/v1/dashboard/claude-health` | Claude API connectivity and latency check |
+| GET | `/api/v1/dashboard/claude-health` | the AI API connectivity and latency check |
 | GET | `/api/v1/dashboard/settings` | Non-sensitive platform configuration |
 | GET | `/api/v1/dashboard/api-usage` | Daily/monthly token and cost usage with breakdown |
 | GET | `/api/v1/dashboard/performance` | Detailed performance: percentiles, error breakdown, throughput, efficiency |
@@ -162,7 +164,7 @@ For drift detection algorithm details, see [EVAL_DATASET_CARD](EVAL_DATASET_CARD
 
 - Manages the full incident lifecycle: open, investigate, resolved, closed
 - Captures troubleshooting checklist (data issue, prompt change, model update, infrastructure, safety/policy)
-- Generates LLM-assisted stakeholder updates and root cause analysis via Claude
+- Generates AI-assisted stakeholder updates and root cause analysis via the model
 - Enforces human-in-the-loop approval: AI drafts go to `summary_draft`, must be explicitly approved before becoming the official `summary`. Approval requires a `reviewer_note` (≥20 non-whitespace chars) so the reviewer cannot silently rubber-stamp a draft. Double-approval returns 409 — attribution is preserved
 - Creates maintenance plans linked to incidents with rollback procedures and admin approval
 

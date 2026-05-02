@@ -9,7 +9,7 @@ commit messages alone.
 
 A coordinated refactor that reshaped the LLM-facing parts of the system
 around three ideas: (1) split the actor model from the judge model with
-honest pricing for each, (2) funnel every Claude call through a single
+honest pricing for each, (2) funnel every the AI call through a single
 limit-enforcement gatekeeper, (3) give every user action a correlation
 ID so the Settings page can show *what one click actually cost*.
 
@@ -17,13 +17,13 @@ ID so the Settings page can show *what one click actually cost*.
 
 - **Two-model architecture, merged-rubric judge.** Sonnet acts, Haiku
   judges factuality + hallucination in one call. A 10-case eval went
-  from **~44 Claude calls to ~16** — roughly 64% fewer calls.
+  from **~44 the AI calls to ~16** — roughly 64% fewer calls.
 - **Single-gatekeeper call limits.** `enforce_call_limits()` is the
-  one function every Claude call passes through, checking hard caps
+  one function every the AI call passes through, checking hard caps
   (per-call cost, max_tokens, prompt length) + soft budgets + rate
   limits. Hard caps are read-only env config surfaced in the UI.
 - **Per-request correlation IDs.** A new ASGI middleware stamps every
-  HTTP request with a UUID; every Claude call fired inside that
+  HTTP request with a UUID; every the AI call fired inside that
   request shares it. The Settings → Call Trace tab groups calls by
   correlation_id so reviewers see *"Evaluation run · 16 calls ·
   $0.08 · 18s"* as one row.
@@ -83,7 +83,7 @@ a classifier outage silently degraded to regex-only — the "best case"
 feature. Removed it and strengthened the regex instead.
 
 **Why.** Fewer moving parts, one less silent-failure mode, and ~33%
-fewer Claude calls per request (each request was hiding an extra Haiku
+fewer the AI calls per request (each request was hiding an extra Haiku
 scan). Story simplifies from *"we have three models"* to *"we have two
 models with clear roles."*
 
@@ -104,7 +104,7 @@ models with clear roles."*
 ## Theme 3 — Hard-cap single gatekeeper
 
 **What.** New `enforce_call_limits(model, max_tokens, prompt_text,
-user_id)` function. Every Claude call passes through `_make_api_call`,
+user_id)` function. Every the AI call passes through `_make_api_call`,
 which calls `enforce_call_limits` *before* reserving a slot or touching
 the network. Checks in cheapest-first order:
 
@@ -139,7 +139,7 @@ budget. One function, one place, testable in isolation.
 ## Theme 4 — Per-request correlation IDs + Call Trace UI
 
 **What.** ASGI middleware assigns every HTTP request a fresh UUID,
-stored in a `contextvars.ContextVar`. Every Claude call fired during
+stored in a `contextvars.ContextVar`. Every the AI call fired during
 that request reads the contextvar and stamps the UUID onto its
 `api_usage_log` row. Two new endpoints consume the data:
 
@@ -183,7 +183,7 @@ accepted or forwarded caller identity. Threaded `user_id` and
 `service_id` through every public LLM function + every router
 call-site. Related fix: `_make_api_call` now measures wall-clock
 latency across the retry loop (was per-attempt, which under-reported
-real wait time during Anthropic throttling).
+real wait time during the LLM provider throttling).
 
 Also tightened `test_connection`'s exception handling to re-raise
 `CallLimitExceeded` and `PromptSafetyError` so the global FastAPI
@@ -291,7 +291,7 @@ legacy dated IDs price correctly.
 **What.** Three housekeeping items:
 
 1. **DB cleanup** (one-shot, no commit — direct SQL after backup):
-   - Service #3's `model_name` was `claude-sonnet-4-6-20250415`; Anthropic
+   - Service #3's `model_name` was `claude-sonnet-4-6-20250415`; the LLM provider
      was 404'ing on that snapshot. Updated to `claude-sonnet-4-6`.
    - 164 smoke-test rows in `api_usage_log` (`caller='test'`,
      `model='m'`) polluting the new Call Trace Flat view — deleted.
@@ -327,7 +327,7 @@ return 405 (or 401 without credentials) to anonymous GETs — both mean
 *"server is up and answered us."* Only 5xx and network errors count
 as the endpoint being down now.
 
-**Why.** Registered Anthropic/OpenAI-style endpoints were showing
+**Why.** Registered the LLM provider/OpenAI-style endpoints were showing
 "Failed" at registration even though they were perfectly healthy.
 
 **Key files.**

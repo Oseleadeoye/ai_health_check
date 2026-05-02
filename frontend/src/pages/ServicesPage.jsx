@@ -100,7 +100,7 @@ function humanizeLlmProbeError(rawSnippet, service) {
   const MAP = {
     not_found_error: {
       title: `Anthropic doesn't recognize the model "${service?.model_name || message.replace(/^model:\s*/, '')}"`,
-      hint: 'Edit the service and change the Model field to a valid Anthropic ID (for example, claude-sonnet-4-5-20250929 or claude-haiku-4-5-20251001).',
+      hint: 'Edit the service and change the Model field to a valid provider ID (for example, claude-sonnet-4-5-20250929 or claude-haiku-4-5-20251001).',
     },
     authentication_error: {
       title: 'Anthropic rejected the API key',
@@ -295,7 +295,7 @@ export default function ServicesPage() {
 
   const runPing = async (id, qs = '') => {
     // Derive mode from the query string so the footer can render it without
-    // a second round-trip. `?mode=llm...` means a real Claude call — we want
+    // a second round-trip. `?mode=llm...` means a real model call — we want
     // to tell the user that explicitly so "Connected 1.8s" stops looking
     // like a slow HTTP probe.
     const mode = qs.includes('mode=llm') ? 'llm' : 'http';

@@ -43,7 +43,7 @@ Every time the app talks to the AI model, it goes through this pipeline:
 
 1. **Scan the input (single-layer regex)** -- 15 injection patterns, PII detection (email, phone, SSN, credit card), and a length limit (hard cap 12 000 chars). Risk score ≥ 80 blocks the call with HTTP 422. An LLM classifier second layer was trialled and removed in commit `73e09b3` — the false-positive rate didn't justify the cost at demo scale.
 2. **Check the budget** -- Block the call if daily ($5) or monthly ($25) spend limits are reached
-3. **Check rate limits** -- Throttle if the user exceeds 20 calls/minute or the system exceeds 30/minute (sized for demo eval batches — a 10-case factuality run fires ~20 Claude calls: 10 actor + 10 merged judge). Exceeding returns HTTP 429.
+3. **Check rate limits** -- Throttle if the user exceeds 20 calls/minute or the system exceeds 30/minute (sized for demo eval batches — a 10-case factuality run fires ~20 the AI calls: 10 actor + 10 merged judge). Exceeding returns HTTP 429.
 4. **Call the model** -- Sonnet for actor + synthesis tasks; Haiku for the judges that score factuality and hallucination. If it fails, retry up to 2 times with backoff
 5. **Scan the output** -- Check the AI's response for personal information before showing it to the user
 6. **Log everything** -- Record tokens, cost, latency, model used, and any safety flags (per-model cost accounting keeps Haiku vs Sonnet rows priced correctly)
@@ -55,8 +55,8 @@ Every time the app talks to the AI model, it goes through this pipeline:
 | Frontend | React 18, Vite 5, Tailwind CSS 3.4, Recharts |
 | Backend | FastAPI, Python 3.11+, SQLAlchemy |
 | Database | SQLite |
-| LLM (actor) | Anthropic Claude Sonnet 4.6 (`claude-sonnet-4-6-20250415`) — services under test + synthesis tasks |
-| LLM (judge) | Anthropic Claude Haiku 4.5 (`claude-haiku-4-5-20251001`) — merged factuality + hallucination judge (one structured call per factuality test case) |
+| LLM (actor) | the LLM provider the AI Sonnet 4.6 (`claude-sonnet-4-6-20250415`) — services under test + synthesis tasks |
+| LLM (judge) | the LLM provider the AI Haiku 4.5 (`claude-haiku-4-5-20251001`) — merged factuality + hallucination judge (one structured call per factuality test case) |
 | Testing | Pytest (188 tests across 22 files, ~71% coverage) |
 
 ## Quick Start
@@ -130,6 +130,7 @@ ai-health-check/
 
 ### Safety & guardrails
 - Prompt safety scanner with 15 injection patterns, PII detection, toxicity checks, length limits
+- Automated PII Leakage Detection integrated directly into the evaluation harness metrics
 - LLM-as-judge hallucination detection (0-100), strict parser rejects judge refusals (no more "404 Not Found" → 100)
 - Sensitivity labels have teeth: confidential services require admin override + audit trail to reach the LLM
 - SSRF guard on every outbound URL (register, update, probe, scheduled tick) blocks metadata services and private IPs
@@ -156,6 +157,8 @@ ai-health-check/
 
 ### Monitoring
 - Advanced drift detection with severity levels, trend analysis, per-test tracking
+- Pure-Python Advanced Evaluation Metrics: TF-IDF Cosine Semantic Similarity scoring alongside LLM Factuality
+- Auto-populating evaluation test suites for newly registered services (including DAN jailbreaks, PII traps, and complex format constraints)
 - Login throttling (lockout after 5 failed attempts)
 - LLM call tracing with prompt/response storage
 - Alert system with acknowledge workflow
@@ -176,7 +179,7 @@ reviewing compliance, or rehearsing a demo.
 | [ARCHITECTURE](docs/ARCHITECTURE.md) | System design, database models, API endpoints, configuration reference |
 | [ONBOARDING](docs/ONBOARDING.md) | Setup steps and platform lifecycle walkthrough |
 | [TESTING_STRATEGY](docs/TESTING_STRATEGY.md) | 188 tests across 22 files with coverage floor, what they cover, how to run |
-| [EVAL_DATASET_CARD](docs/EVAL_DATASET_CARD.md) | Test cases, scoring methodology, drift detection algorithm, judge-refused handling |
+| [EVAL_DATASET_CARD](docs/EVAL_DATASET_CARD.md) | Test cases (6-case auto-populated suite), scoring methodology (Semantic, PII, Factuality, JSON), drift algorithm |
 | [PROMPT_CHANGE_LOG](docs/PROMPT_CHANGE_LOG.md) | All 7 LLM prompt templates, model history, parser changes |
 | [RISK_REGISTER](docs/RISK_REGISTER.md) | 17 risks with mitigations and residuals |
 | [MAINTENANCE_RUNBOOK](docs/MAINTENANCE_RUNBOOK.md) | 15 operational scenarios (incl. audit integrity, SSRF, confidential override, judge refusals) |

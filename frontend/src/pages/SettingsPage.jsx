@@ -69,7 +69,7 @@ const FLAG_EXPLAINERS = {
     action: 'Flag only — response still returned',
     title: 'Model refusal detected',
     description:
-      "Claude's response matched a refusal phrase. Often means the model declined a sensitive request, but in eval contexts it may mask the judge returning a non-numeric answer.",
+      "The model's response matched a refusal phrase. Often means the model declined a sensitive request, but in eval contexts it may mask the judge returning a non-numeric answer.",
     examples: [
       '"I cannot / I\'m not able to / I won\'t…"',
       '"I apologize, but I cannot…"',
@@ -199,16 +199,16 @@ const ERROR_EXPLAINERS = {
   rate_limit: {
     icon: TimerReset,
     tone: 'degraded',
-    title: 'Anthropic rate limit (HTTP 429)',
+    title: 'Provider rate limit (HTTP 429)',
     description:
-      "Anthropic returned 429 — the account or this specific model tripped its per-minute or per-day request limit. The call already retried with exponential backoff and still couldn't get through.",
+      "The model provider returned 429 — the account or this specific model tripped its per-minute or per-day request limit. The call already retried with exponential backoff and still couldn't get through.",
     cause: [
       'Traffic spike — too many concurrent eval runs or scheduled health checks firing simultaneously.',
       "Workspace key is shared with another app that's saturating the limit.",
-      'The model tier (Sonnet vs Haiku) has a lower TPM/RPM ceiling than this workload needs.',
+      'The model tier has a lower TPM/RPM ceiling than this workload needs.',
     ],
     fix:
-      'Reduce api_max_calls_per_minute in config, stagger scheduled jobs, or request a higher quota from Anthropic. Check the Cost tab to see if retries are inflating spend.',
+      'Reduce api_max_calls_per_minute in config, stagger scheduled jobs, or request a higher quota from the provider. Check the Cost tab to see if retries are inflating spend.',
     retried: '2× exponential backoff + jitter before surfacing as an error.',
     source: 'llm_client.py:345 anthropic.RateLimitError',
   },
@@ -217,45 +217,45 @@ const ERROR_EXPLAINERS = {
     tone: 'degraded',
     title: 'API connection error / timeout',
     description:
-      "The HTTPS call to Anthropic didn't complete. Either the connection never established, was cut mid-stream, or didn't return within llm_timeout_seconds (default 30).",
+      "The HTTPS call to the provider didn't complete. Either the connection never established, was cut mid-stream, or didn't return within llm_timeout_seconds (default 30).",
     cause: [
-      'Transient network blip between the backend host and api.anthropic.com.',
-      'Anthropic edge node dropped the connection (rare but happens).',
-      'The model is generating unusually long output that exceeds the timeout — not the Anthropic SDK raising internally, but the socket timing out.',
+      'Transient network blip between the backend host and the API endpoint.',
+      'The provider edge node dropped the connection (rare but happens).',
+      'The model is generating unusually long output that exceeds the timeout.',
     ],
     fix:
       'If spiking, check outbound egress / DNS. If persistent and latency is high, consider raising llm_timeout_seconds. Does not indicate a bad prompt or bad key.',
     retried: '2× exponential backoff + jitter before surfacing as an error.',
-    source: 'llm_client.py:353 anthropic.APIConnectionError',
+    source: 'llm_client.py:353 APIConnectionError',
   },
   server: {
     icon: ServerCrash,
     tone: 'failing',
-    title: 'Anthropic internal server error (HTTP 5xx)',
+    title: 'Provider internal server error (HTTP 5xx)',
     description:
-      'Anthropic returned a 5xx. Their side, not ours. The SDK raised InternalServerError — request was well-formed but their API could not complete it.',
+      'The provider returned a 5xx. Their side, not ours. The request was well-formed but their API could not complete it.',
     cause: [
-      'Anthropic platform incident — check status.anthropic.com.',
+      'Provider platform incident — check status page.',
       'Rare — routing/capacity hiccup for a specific model in a specific region.',
     ],
     fix:
-      "Nothing you can do locally. The code already retries. If the rate stays elevated, open a support ticket with Anthropic and reference the timestamp(s) from this panel.",
+      "Nothing you can do locally. The code already retries. If the rate stays elevated, open a support ticket with the provider and reference the timestamp(s) from this panel.",
     retried: '2× exponential backoff + jitter before surfacing as an error.',
-    source: 'llm_client.py:361 anthropic.InternalServerError',
+    source: 'llm_client.py:361 InternalServerError',
   },
   auth: {
     icon: KeyRound,
     tone: 'failing',
     title: 'Authentication error (HTTP 401)',
     description:
-      "Anthropic rejected the API key. The SDK raised AuthenticationError, and we fail IMMEDIATELY — no retries, because retrying a bad key just keeps failing.",
+      "The provider rejected the API key. We fail IMMEDIATELY — no retries, because retrying a bad key just keeps failing.",
     cause: [
-      'anthropic_api_key in .env is missing, malformed, revoked, or rotated.',
+      'API key in .env is missing, malformed, revoked, or rotated.',
       'Key belongs to a workspace that lost access to the requested model.',
       'Stray whitespace or unescaped characters around the key when loaded.',
     ],
     fix:
-      'Verify ANTHROPIC_API_KEY. Rotate if it was ever committed or shared. This is a configuration error — any recurrence means the fix never took.',
+      'Verify the configured API key. Rotate if it was ever committed or shared. This is a configuration error — any recurrence means the fix never took.',
     retried: 'No — non-retryable.',
     source: 'llm_client.py:369 anthropic.AuthenticationError',
   },
@@ -264,11 +264,11 @@ const ERROR_EXPLAINERS = {
     tone: 'failing',
     title: 'Bad request (HTTP 400)',
     description:
-      "Anthropic rejected the request shape. SDK raised BadRequestError — malformed payload, exceeded max_tokens ceiling, empty messages array, etc. Not retried (retrying won't fix a shape problem).",
+      "The provider rejected the request shape. Malformed payload, exceeded max_tokens ceiling, empty messages array, etc. Not retried (retrying won't fix a shape problem).",
     cause: [
       'max_tokens requested exceeds the model\'s hard ceiling.',
       'Prompt exceeds the model context window (post-tokenization).',
-      'Invalid content block structure (rare — would mean an SDK/backend code bug).',
+      'Invalid content block structure (rare — would mean a backend code bug).',
     ],
     fix:
       "Open APIUsageLog for the matching row and inspect prompt_text / caller. If it's a code bug, fix the request shape. If it's user input length, tighten max_prompt_length in safety config.",
@@ -280,10 +280,10 @@ const ERROR_EXPLAINERS = {
     tone: 'failing',
     title: 'Unknown / uncategorised error',
     description:
-      "Caught by the bare except Exception block after none of the specific handlers (rate-limit, timeout, 5xx, auth, bad-request) matched. Usually means something failed inside our code AFTER the Anthropic response came back, or a new Anthropic exception class we haven't wired up yet.",
+      "Caught by the bare except Exception block after none of the specific handlers (rate-limit, timeout, 5xx, auth, bad-request) matched. Usually means something failed inside our code AFTER the model response came back, or a new exception class we haven't wired up yet.",
     cause: [
       'Response parsing bug on our side (e.g. content[0].text on an empty content list).',
-      "A new or deprecated anthropic SDK exception we don't catch explicitly yet.",
+      "A new or deprecated SDK exception we don't catch explicitly yet.",
       'Downstream code raised (safety scanner, usage logger, pricing calc) before the call finalised cleanly.',
       'OS-level issue — disk full while writing APIUsageLog, etc.',
     ],
@@ -771,7 +771,7 @@ export default function SettingsPage() {
                   label="Timeout"
                   value={`${config.runtime.timeout_seconds}s`}
                   mono
-                  tooltip="How long the client waits for any single Claude call before giving up. Retries with exponential backoff on transient errors (rate-limit / timeout / server error) up to 2 times."
+                  tooltip="How long the client waits for any single AI call before giving up. Retries with exponential backoff on transient errors (rate-limit / timeout / server error) up to 2 times."
                 />
               </Card>
             </>
@@ -808,7 +808,7 @@ export default function SettingsPage() {
                 badge="Read-only · configured via env"
               >
                 <p className="text-[12px] text-text-muted mb-3 leading-relaxed">
-                  Every Claude call in the system passes through one function
+                  Every AI call in the system passes through one function
                   (<code className="font-mono text-[12px] bg-surface-elevated px-1 py-0.5 rounded">enforce_call_limits</code>)
                   that rejects requests exceeding these hard caps <em>before</em>
                   the network call. This is defense against bugs and misuse;
@@ -856,28 +856,28 @@ export default function SettingsPage() {
                     label="Daily budget"
                     value={`$${limits.soft_limits.daily_budget_usd.toFixed(2)}`}
                     sub="total spend cap / day"
-                    tooltip="Blocks new Claude calls once today's total API spend reaches this amount. Resets at midnight UTC."
+                    tooltip="Blocks new AI calls once today's total API spend reaches this amount. Resets at midnight UTC."
                   />
                   <LimitStat
                     icon={CreditCard}
                     label="Monthly budget"
                     value={`$${limits.soft_limits.monthly_budget_usd.toFixed(2)}`}
                     sub="total spend cap / month"
-                    tooltip="Blocks new Claude calls once this month's total API spend reaches this amount. Resets on the 1st."
+                    tooltip="Blocks new AI calls once this month's total API spend reaches this amount. Resets on the 1st."
                   />
                   <LimitStat
                     icon={Gauge}
                     label="Global rate"
                     value={`${limits.soft_limits.calls_per_minute}`}
                     sub="calls/minute (all users)"
-                    tooltip="Maximum Claude calls across the whole system per rolling 60-second window. Prevents bursts that would trigger provider-side throttling."
+                    tooltip="Maximum AI calls across the whole system per rolling 60-second window. Prevents bursts that would trigger provider-side throttling."
                   />
                   <LimitStat
                     icon={UserX}
                     label="Per-user rate"
                     value={`${limits.soft_limits.calls_per_user_per_minute}`}
                     sub="calls/minute per user"
-                    tooltip="Maximum Claude calls that a single authenticated user can fire per rolling 60-second window."
+                    tooltip="Maximum AI calls that a single authenticated user can fire per rolling 60-second window."
                   />
                   <LimitStat
                     icon={FileWarning}
@@ -903,7 +903,7 @@ export default function SettingsPage() {
                     pct={limits.soft_limits.daily_budget_usd > 0
                       ? (limits.current_usage.today_usd / limits.soft_limits.daily_budget_usd) * 100
                       : null}
-                    tooltip="Sum of estimated cost for every Claude call today (all users, all callers). Compared against the daily budget."
+                    tooltip="Sum of estimated cost for every AI call today (all users, all callers). Compared against the daily budget."
                   />
                   <LimitStat
                     icon={DollarSign}
@@ -913,7 +913,7 @@ export default function SettingsPage() {
                     pct={limits.soft_limits.monthly_budget_usd > 0
                       ? (limits.current_usage.month_usd / limits.soft_limits.monthly_budget_usd) * 100
                       : null}
-                    tooltip="Sum of estimated cost for every Claude call this month (all users, all callers). Compared against the monthly budget."
+                    tooltip="Sum of estimated cost for every AI call this month (all users, all callers). Compared against the monthly budget."
                   />
                   <LimitStat
                     icon={Gauge}
@@ -923,7 +923,7 @@ export default function SettingsPage() {
                     pct={limits.soft_limits.calls_per_minute > 0
                       ? (limits.current_usage.calls_last_minute / limits.soft_limits.calls_per_minute) * 100
                       : null}
-                    tooltip="Claude calls in the last 60 seconds across all users. Compared against the global rate limit."
+                    tooltip="AI calls in the last 60 seconds across all users. Compared against the global rate limit."
                   />
                   <LimitStat
                     icon={UserX}
@@ -933,7 +933,7 @@ export default function SettingsPage() {
                     pct={limits.soft_limits.calls_per_user_per_minute > 0
                       ? (limits.current_usage.calls_last_minute_by_user / limits.soft_limits.calls_per_user_per_minute) * 100
                       : null}
-                    tooltip="Claude calls fired by your user account in the last 60 seconds. Compared against the per-user rate limit."
+                    tooltip="AI calls fired by your user account in the last 60 seconds. Compared against the per-user rate limit."
                   />
                 </div>
               </Card>
@@ -944,7 +944,7 @@ export default function SettingsPage() {
               {apiUsage && apiUsage.breakdown && apiUsage.breakdown.length > 0 && (
                 <Card icon={Coins} title="Cost by function" badge="Today">
                   <p className="text-[12px] text-text-muted mb-3 leading-relaxed">
-                    Which functions are driving today's Claude spend. Useful for
+                    Which functions are driving today's AI spend. Useful for
                     spotting runaway loops or unexpected usage patterns before
                     the budget cap fires.
                   </p>
@@ -981,7 +981,7 @@ export default function SettingsPage() {
                   Every user action in this app shares a single correlation ID.
                   Use <span className="font-semibold text-text">Grouped</span> for a
                   user-action view (default — click to drill down into each
-                  Claude call), or <span className="font-semibold text-text">Flat</span>
+                  AI call), or <span className="font-semibold text-text">Flat</span>
                   {' '}for a raw chronological call feed. Background scheduler
                   activity is excluded from Grouped (it isn't a user action).
                 </p>
@@ -1069,7 +1069,7 @@ export default function SettingsPage() {
                       <EmptyState
                         icon={Network}
                         title="No traced activities"
-                        description="User actions appear here once the app fires Claude calls with a correlation id. Try clicking Ping on a service or running an evaluation."
+                        description="User actions appear here once the app fires AI calls with a correlation id. Try clicking Ping on a service or running an evaluation."
                       />
                     )}
 
@@ -1106,7 +1106,7 @@ export default function SettingsPage() {
                       <EmptyState
                         icon={Zap}
                         title="No API calls yet"
-                        description="Recent Claude calls appear here once the app fires them. Showing at most the last 10 calls."
+                        description="Recent AI calls appear here once the app fires them. Showing at most the last 10 calls."
                       />
                     )}
                     <p className="mt-3 text-[11px] text-text-subtle">
@@ -1203,13 +1203,13 @@ export default function SettingsPage() {
                 <>
                   <h4 className="text-[11px] font-medium text-text-subtle tracking-tight mb-2 flex items-center gap-1.5">
                     Volume
-                    <InfoTip content="How much Claude traffic this deployment has moved. Different from Limits, which are caps — these are the raw totals over the given window." />
+                    <InfoTip content="How much AI traffic this deployment has moved. Different from Limits, which are caps — these are the raw totals over the given window." />
                   </h4>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
                     <Stat
                       label="Calls today"
                       value={apiUsage.daily.calls.toLocaleString()}
-                      tooltip="Number of Claude API calls made today, all callers, all models."
+                      tooltip="Number of AI API calls made today, all callers, all models."
                     />
                     <Stat
                       label="Tokens today"
@@ -1232,7 +1232,7 @@ export default function SettingsPage() {
 
               <h4 className="text-[11px] font-medium text-text-subtle tracking-tight mb-2 flex items-center gap-1.5 pt-3 border-t border-hairline">
                 API latency · today
-                <InfoTip content="Response times today across all Claude API calls, in milliseconds. Percentile labels describe where a given value sits in the distribution." />
+                <InfoTip content="Response times today across all AI API calls, in milliseconds. Percentile labels describe where a given value sits in the distribution." />
               </h4>
               <div className="grid grid-cols-6 gap-2 mb-4">
                 {[

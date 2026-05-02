@@ -8,7 +8,7 @@ New developer setup and platform workflow.
 
 - Python 3.11+
 - Node.js 18+
-- Anthropic API key (set as `ANTHROPIC_API_KEY` environment variable)
+- the LLM provider API key (set as `ANTHROPIC_API_KEY` environment variable)
 
 ## Setup
 
@@ -62,7 +62,7 @@ in-memory test-fixture email, which never existed in the running app
 3. **Monitor dashboard** -- View aggregated latency, quality, throughput, and error metrics with P50/P95/P99 percentiles (DashboardPage).
 4. **Detect drift** -- Review drift severity (none/warning/critical) and trend direction in the drift panel (EvaluationsPage).
 5. **Create incident** -- File an incident ticket when drift, latency spikes, or safety anomalies occur (IncidentsPage).
-6. **Generate AI summary and approve** -- Claude drafts an incident summary or post-mortem; engineer approves or rejects before it takes effect (IncidentDetailPage).
+6. **Generate AI summary and approve** -- The AI drafts an incident summary or post-mortem; engineer approves or rejects before it takes effect (IncidentDetailPage).
 7. **Plan maintenance** -- Schedule rollbacks or fixes through the maintenance planner (IncidentDetailPage).
 8. **Export compliance evidence** -- Filter and export audit logs as JSON for compliance review (GovernancePage).
 

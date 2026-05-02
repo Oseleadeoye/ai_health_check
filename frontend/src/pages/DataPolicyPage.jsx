@@ -84,8 +84,8 @@ export default function DataPolicyPage() {
             <FlowNode icon={Database} label="SQLite" sublabel="Local storage" />
             <FlowNode
               icon={Server}
-              label="Claude API"
-              sublabel={model ? `Anthropic · ${model.split('-').slice(0, 3).join('-')}` : 'Cloud inference'}
+              label="AI Model API"
+              sublabel={model ? `Provider · ${model.split('-').slice(0, 3).join('-')}` : 'Cloud inference'}
             />
           </div>
         </div>
@@ -99,8 +99,8 @@ export default function DataPolicyPage() {
           as bcrypt hashes. Prompt safety scan results and risk scores are logged per API call.
         </PolicySection>
 
-        <PolicySection icon={Globe} title="What is sent to Anthropic?">
-          <p className="mb-2">Data dispatched to Claude API:</p>
+        <PolicySection icon={Globe} title="What is sent to the LLM Provider?">
+          <p className="mb-2">Data dispatched to the AI API:</p>
           <ul className="space-y-1.5">
             <li className="flex items-start gap-2"><Dot /> Test connection prompts (short "hello" prompt)</li>
             <li className="flex items-start gap-2"><Dot /> Evaluation test case prompts (synthetic data)</li>
@@ -113,7 +113,7 @@ export default function DataPolicyPage() {
         <PolicySection icon={Lock} title="Are prompts logged?">
           Redacted prompt and response snippets are stored in the local API usage log for traceability,
           truncated to 2,000 characters. The log also records latency, token counts, cost estimate,
-          safety flags, and risk score. Per Anthropic's policy, API inputs/outputs are not used
+          safety flags, and risk score. Per the provider's policy, API inputs/outputs are not used
           for model training.
         </PolicySection>
 
@@ -157,7 +157,7 @@ export default function DataPolicyPage() {
               </span>
             )}
           </div>
-          All inputs are checked for injection patterns, PII/PHI, and length limits before reaching Claude.
+          All inputs are checked for injection patterns, PII/PHI, and length limits before reaching the AI model.
           Supported identifiers are redacted to placeholders such as [PATIENT_NAME], [DOB], and [SSN].
           Blocked calls are logged with safety flags and risk scores. Budget enforcement prevents cost overruns.{' '}
           <Link

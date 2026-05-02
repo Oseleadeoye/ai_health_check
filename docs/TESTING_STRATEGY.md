@@ -12,7 +12,7 @@ Coverage floor: 65% (currently ~71%).
 | In-memory SQLite | Fresh database per test session for full isolation |
 | FastAPI TestClient | Synchronous HTTP client wrapping the ASGI app |
 | Auth fixtures (`conftest.py`) | Pre-built JWT tokens for admin, maintainer, and viewer roles |
-| Mocked LLM | All Anthropic API calls patched; no API key consumption |
+| Mocked LLM | All the LLM provider API calls patched; no API key consumption |
 | Audit-log triggers | SQLite append-only triggers installed in `setup_db` fixture and dropped in teardown |
 | DNS stub | `socket.getaddrinfo` stubbed to a public IP for test hostnames; SSRF tests override with literal IPs |
 | FK enforcement | `PRAGMA foreign_keys=ON` set on every SQLite connection via engine event |

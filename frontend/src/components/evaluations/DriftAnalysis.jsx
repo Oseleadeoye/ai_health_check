@@ -24,7 +24,7 @@ const psiColor = (severity) => (
         : 'text-text-subtle'
 );
 
-export default function DriftAnalysis({ services, selectedId, onSelect }) {
+export default function DriftAnalysis({ services, selectedId, onSelect, refreshTrigger }) {
   const [data, setData] = useState(null);
   const [trend, setTrend] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -50,7 +50,7 @@ export default function DriftAnalysis({ services, selectedId, onSelect }) {
   // (confirmRunEval bumps selectedDriftService to the just-evaluated service).
   useEffect(() => {
     if (selectedId) fetchDrift(selectedId);
-  }, [selectedId]);
+  }, [selectedId, refreshTrigger]);
 
   const sev = data ? SEV_CONFIG[data.drift_severity] || SEV_CONFIG.none : null;
   const psi = data?.output_distribution_drift;

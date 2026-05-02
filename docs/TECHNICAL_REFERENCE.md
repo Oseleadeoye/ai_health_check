@@ -2,7 +2,7 @@
 
 ## Technical Documentation — Reference Manual and Presentation Defense Guide
 
-> Last updated: 2026-04-18 · current as of commit `550f6cf`
+> Last updated: 2026-05-02 · current as of commit `HEAD`
 > Project: AI Health Check · ARTI-409-A · AI Systems & Governance
 
 This document is the canonical technical reference for the AI Health Check
@@ -61,12 +61,10 @@ single schema, a single audit chain, and a single human-in-the-loop
 (HITL) contract. Built as a university capstone, scoped for clarity
 rather than production scale.
 
-The system comprises a FastAPI backend, a React 18 frontend, a SQLite
-database, a two-tier Anthropic integration (Claude Sonnet 4.6 as actor,
-Claude Haiku 4.5 as judge + prompt-injection detector, both via the same
-`_make_api_call` pipeline), 158 automated tests with 78 % coverage, and
-15 maintained documentation files covering architecture, risks,
-methodology, and operational runbooks.
+database, a two-tier the LLM provider integration (the AI Sonnet 4.6 as actor,
+the AI Haiku 4.5 as judge + prompt-injection detector, both via the same
+`_make_api_call` pipeline), advanced semantic similarity scoring,
+automated PII leakage detection, and 188 automated tests.
 
 ---
 
@@ -182,8 +180,10 @@ involves a human who signs off.
 | Frontend | React 18, Vite 5, Tailwind CSS 3.4, Recharts 2.12 | Single-file build, tree-shakable, fast dev feedback |
 | Backend | FastAPI, Pydantic, SQLAlchemy 2.0, Alembic (scaffolded) | Typed request validation, auto-OpenAPI docs, dialect-portable ORM |
 | Database | SQLite (file-based) | Zero-config for demo scope; migration path to Postgres documented |
-| LLM (actor) | Anthropic Claude Sonnet 4.6 via `anthropic>=0.49.0` SDK | Service-under-test model + synthesis tasks (incident summaries, dashboard insights, compliance reports) |
-| LLM (judge) | Anthropic Claude Haiku 4.5 via the same SDK | Merged factuality + hallucination judge — one structured call per factuality test case (see commit `0fbddac`). Different size/training emphasis from the actor partially breaks the "model scoring itself" correlation. Input safety is single-layer regex after commit `73e09b3` — no LLM classifier. |
+| LLM (actor) | the LLM provider the AI Sonnet 4.6 via `anthropic>=0.49.0` SDK | Service-under-test model + synthesis tasks (incident summaries, dashboard insights, compliance reports) |
+| LLM (judge) | the LLM provider the AI Haiku 4.5 via the same SDK | Merged factuality + hallucination judge — one structured call per factuality test case. Different size/training emphasis from the actor partially breaks the "model scoring itself" correlation. |
+| Semantic Metric | Pure-Python TF-IDF + Cosine Similarity | objective vocabulary-overlap scoring without LLM calls |
+| Security Metric | Regex-based PII Scanner | Automated detection of sensitive data (email, SSN, etc.) in LLM output |
 | Auth | JWT (HS256), bcrypt password hashing | Stateless token, industry-standard hashing |
 | Background jobs | APScheduler | Lightweight, in-process, toggleable for demos |
 | Testing | pytest, pytest-asyncio, pytest-cov | 188 tests across 22 files, 71 % coverage, 65 % floor |
@@ -213,7 +213,7 @@ involves a human who signs off.
                     │
 ┌───────────────────▼───────────────────────────┐
 │         External Dependencies                 │
-│  Anthropic API — two-tier:                    │
+│  the LLM provider API — two-tier:                    │
 │    Sonnet 4.6 (actor + synthesis)             │
 │    Haiku 4.5  (judges + injection detector)   │
 │  APScheduler job loop                         │
@@ -296,8 +296,8 @@ For an LLM call (example: generate incident summary):
          - _check_budget() counts api_usage_log rows
          - INSERT api_usage_log (status='reserved', worst-case cost)
        Lock released
-    c. client.messages.create(...)   (actual Claude call, outside lock)
-    d. scan_output()        (regex: PII leak, refusal)
+    c. client.messages.create(...)   (actual LLM call, outside lock)
+    d. scan_output()        (regex: PII leak, refusal, and PII Safe score calculation)
     e. _finalize_reservation() updates the reserved row with real tokens, cost, status
  5. Handler persists        → incident.summary_draft = result
                             → log_action("generate_summary_draft")
@@ -356,7 +356,7 @@ environment, model name, sensitivity classification, and endpoint URL.
 **Security handling.**
 
 - Endpoint URLs are SSRF-validated before any request is made.
-- API keys are never stored on `AIService`; the Anthropic key lives in
+- API keys are never stored on `AIService`; the the LLM provider key lives in
   `backend/.env` (git-ignored) and is loaded via `config.py`.
 - Deletion of a service cascades or restricts based on FK declarations
   (SQLite `PRAGMA foreign_keys=ON` installed on every connection).
@@ -391,7 +391,11 @@ service, the harness:
    AND `detect_hallucination()` (LLM judge).
 3. If `category == "format_json"`, attempts `json.loads()` on the
    response; 100 on success, 0 on failure (deterministic).
-4. Persists an `EvalRun` row (aggregate scores) plus one `EvalResult`
+4. For all successful calls, computes **TF-IDF Semantic Similarity**
+   against expected output.
+5. For all successful calls, runs **PII Leakage Detection** to ensure
+   no sensitive data was exposed.
+6. Persists an `EvalRun` row (aggregate scores) plus one `EvalResult`
    row per test case.
 
 **Judge parser.** `_parse_judge_score()` uses `re.fullmatch` — only a
@@ -547,7 +551,7 @@ surface during compliance review.
 **Data handling policy.** `DataPolicyPage.jsx` describes: what is stored
 locally (SQLite DB, including service metadata, eval prompts, incident
 symptoms, audit trail, usage logs, bcrypt password hashes), what is
-sent to Anthropic (eval test prompts, incident-summary prompts,
+sent to the LLM provider (eval test prompts, incident-summary prompts,
 dashboard-insight prompts, compliance-report prompts), prompt retention
 (metadata only by default, but `APIUsageLog.prompt_text` stores the
 prompt up to 2000 characters for tracing — **this is a gap; see §11**),
@@ -624,7 +628,7 @@ Step 6 — LLM generates summary (M3)
 POST /incidents/{id}/generate-summary
   enforce_sensitivity (admin override flag if confidential)
   generate_summary(service_name, severity, symptoms, checklist)
-  → Claude returns stakeholder update + root causes
+  → The AI returns stakeholder update + root causes
   Write to incident.summary_draft (never to summary)
   audit "generate_summary_draft"
 
@@ -682,7 +686,7 @@ Seven functions in `llm_client.py`, all routed through `_make_api_call`:
 
 | Function | Module | Purpose | Max tokens |
 |---|---|---|---|
-| `test_connection` | M1 | Verify Claude reachability | 50 |
+| `test_connection` | M1 | Verify the AI reachability | 50 |
 | `run_eval_prompt` | M2 | Execute a test case prompt | 1024 |
 | `score_factuality` | M2 | Rate factual similarity 0–100 (judge) | 10 |
 | `detect_hallucination` | M2 | Rate fabrication 0–100 (judge) | 10 |
@@ -912,7 +916,7 @@ enforced in `pyproject.toml`.
   exercise single functions with no HTTP client.
 - **Integration**: all other files use `TestClient` from FastAPI to hit
   real endpoints with an in-memory SQLite DB, mocking only the
-  Anthropic API.
+  the LLM provider API.
 
 ### 9.3 Test infrastructure
 
@@ -1061,7 +1065,7 @@ explicitly flagged here.
 
 ### 11.1 Methodological
 
-- **LLM-as-judge circularity** — Claude scores Claude. No second-model
+- **LLM-as-judge circularity** — the AI scores the AI. No second-model
   validation, no human-annotated calibration set.
   (`SELF_CRITIQUE.md §1`)
 - **Drift detection at demo N** — 2 test cases per service, split-half
@@ -1098,7 +1102,7 @@ explicitly flagged here.
 
 ### 11.4 What is simulated vs real
 
-- **LLM calls**: real (live Anthropic API), but demo budget is capped
+- **LLM calls**: real (live the LLM provider API), but demo budget is capped
   at $5/day.
 - **Evaluation test cases**: synthetic. 6 cases total.
 - **Historical eval runs**: seeded with randomised scores for the
@@ -1114,7 +1118,7 @@ explicitly flagged here.
 |---|---|
 | Encryption at rest | Not implemented |
 | Encryption in transit enforcement | Not configured (no HTTPS gateway) |
-| BAA with Anthropic | Not documented |
+| BAA with the LLM provider | Not documented |
 | DPIA | Not documented |
 | MFA | Not implemented |
 | Password policy | No min-length / complexity |
@@ -1137,7 +1141,7 @@ Prioritised by user impact per unit effort.
 ### 12.1 Near-term (weeks)
 
 1. **LLM-based injection classifier** as second-stage input check.
-   Anthropic Haiku, ~1¢/call. Catches paraphrased injections the
+   the LLM provider Haiku, ~1¢/call. Catches paraphrased injections the
    regex misses.
 2. **Second-model judge** (Haiku or different vendor) for 10 % of eval
    runs. Log agreement rate; flag disagreements for human review.
@@ -1247,10 +1251,10 @@ strong default.
    one HITL contract.
 4. **Architecture diagram (90 sec).** Four layers (UI, API, DB, LLM);
    9 routers; 14 models; 5 services; one LLM pipeline. Stress: no
-   router imports the Anthropic SDK directly.
+   router imports the the LLM provider SDK directly.
 5. **Tech stack justification (45 sec).** React/Vite for fast dev
    feedback; FastAPI for typed validation; SQLite for zero-config
-   (migration path to Postgres documented); Anthropic two-tier
+   (migration path to Postgres documented); the LLM provider two-tier
    (Sonnet 4.6 actor + Haiku 4.5 judges / injection detector) via a
    single pipeline so vendor-swap is one file.
 6. **Demo data readiness (30 sec).** Fresh seed includes 15 eval runs
@@ -1350,7 +1354,7 @@ Jack (M1) and Sakir (M2) within this segment.
    - Audit entry with `reviewer_note_len`
    Backend re-strips whitespace so "20 spaces" is rejected.
 4. **Live demo: generate + approve summary (90 sec).** Click Generate
-   → wait for Claude (~5-10s, narrate the pipeline during wait) →
+   → wait for the AI (~5-10s, narrate the pipeline during wait) →
    draft appears in yellow banner → click Approve → ReviewerNoteModal
    opens → paste prepared note → submit. Navigate to Governance → show
    audit entry with `reviewer_note_len=64`.
@@ -1372,7 +1376,7 @@ Jack (M1) and Sakir (M2) within this segment.
   HITL requires four-eyes (distinct drafter/approver), semantic
   validation of the note against the draft, and time-on-screen
   telemetry. We built Level-1; Level-2+ is roadmap. See SELF_CRITIQUE §5."*
-- **"What happens if Anthropic returns garbage for the judge prompt?"**
+- **"What happens if the LLM provider returns garbage for the judge prompt?"**
   *"The parser uses re.fullmatch — only a bare integer is accepted.
   Refusals like 'I cannot rate this' return None. The eval harness
   marks those as status=judge_refused and excludes them from the
@@ -1405,7 +1409,7 @@ Jack (M1) and Sakir (M2) within this segment.
    version: would not pass any of them without the 6-12 week
    remediation roadmap documented in GOVERNANCE_AUDIT. Specifically
    blocked by missing MFA, missing encryption at rest, no BAA with
-   Anthropic, absent four-eyes, no external audit anchor."*
+   the LLM provider, absent four-eyes, no external audit anchor."*
 5. **Future work (30 sec).** Three near-term: LLM-based injection
    classifier, second-model judge, grounding check on summaries.
    Three medium-term: external audit anchor, Postgres + TDE, Redis
@@ -1433,7 +1437,7 @@ Jack (M1) and Sakir (M2) within this segment.
   DB, or a WORM-enforced audit service. Documented as R9 residual."*
 - **"If deployed in a hospital, would this pass HIPAA review?"**
   *"No — not without remediation. Blocking findings: no BAA with
-  Anthropic documented, no encryption at rest, no MFA on admin, no
+  the LLM provider documented, no encryption at rest, no MFA on admin, no
   segregation of duties. We've mapped every Security Rule control
   individually in GOVERNANCE_AUDIT.md. It's a 6-12 week programme,
   not a rebuild. We know exactly what's missing."*
@@ -1504,7 +1508,7 @@ demonstrably designed for production. Thank you."*
 - 3 user roles (admin, maintainer, viewer)
 - 3 sensitivity labels (public, internal, confidential)
 - 1 hash-chain audit trail with SQLite append-only triggers
-- 1 single Anthropic API integration swappable in one file
+- 1 single the LLM provider API integration swappable in one file
 
 ---
 

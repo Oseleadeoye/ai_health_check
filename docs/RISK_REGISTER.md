@@ -32,9 +32,9 @@
 
 Sensitive data sent to or returned from the cloud LLM.
 
-- `scan_input()` in `safety.py` detects email, phone, SSN, and credit card via compiled regex before any prompt reaches Claude
+- `scan_input()` in `safety.py` detects email, phone, SSN, and credit card via compiled regex before any prompt reaches the AI
 - `scan_output()` in `safety.py` flags PII in responses; blocks those containing SSN or credit card (`safe` returns false)
-- All outbound API calls routed through `llm_client.py` -- no route handler touches the Anthropic SDK
+- All outbound API calls routed through `llm_client.py` -- no route handler touches the the LLM provider SDK
 - `sanitize_text()` in `safety.py` strips control characters and HTML-encodes angle brackets
 
 Residual: PII in formats not matching the four regex patterns will pass through undetected.
@@ -43,7 +43,7 @@ Residual: PII in formats not matching the four regex patterns will pass through 
 
 ### R2: Model Drift
 
-Anthropic updates Claude and response quality degrades silently.
+the LLM provider updates the AI and response quality degrades silently.
 
 - Eval harness produces quality scores (0-100); drift threshold at 75% triggers flag
 - Per-test tracking via `EvalResult` model stores score, latency, and response per test case per run
@@ -57,7 +57,7 @@ Residual: Small test dataset (2 cases per service) may miss category-specific de
 
 ### R3: Hallucination
 
-Claude generates plausible but incorrect root causes or summaries.
+the AI generates plausible but incorrect root causes or summaries.
 
 - LLM output stored in `summary_draft` holding field; requires explicit approval via `approved_by`
 - `score_factuality()` in `llm_client.py` rates factual similarity 0-100 during eval runs (see [PROMPT_CHANGE_LOG.md](PROMPT_CHANGE_LOG.md) for prompt template)
@@ -69,7 +69,7 @@ Residual: Human reviewer may lack domain knowledge to catch subtle inaccuracies.
 
 ### R4: Evaluation Bias
 
-Claude consistently favors certain root causes or phrases recommendations in biased ways.
+the AI consistently favors certain root causes or phrases recommendations in biased ways.
 
 - Human review of every LLM suggestion before it enters the incident record
 - Per-test-case breakdown in drift-check endpoint shows individual performance and trends
@@ -81,13 +81,13 @@ Residual: All test cases are English-only and synthetically generated.
 
 ### R5: Service Outage
 
-Anthropic API goes down or rate limits are hit during operations.
+the LLM provider API goes down or rate limits are hit during operations.
 
 - `_make_api_call()` in `llm_client.py` retries with exponential backoff: `2^attempt + random(0, 0.5)` sec, max 2 retries for `RateLimitError`, `APIConnectionError`, `InternalServerError`
 - `test_connection()` in `llm_client.py` verifies API availability (max_tokens=50, catches all exceptions)
 - Incident workflow (create, triage, checklist) operates fully without the LLM
 
-Residual: Extended Anthropic outages (>2h) block summary generation and evaluations.
+Residual: Extended the LLM provider outages (>2h) block summary generation and evaluations.
 
 ---
 
@@ -100,7 +100,7 @@ Automated evaluations or heavy usage exceeds budget.
 - Every call logged to `api_usage_log` with `estimated_cost_usd`; `BudgetExceededError` raised at HTTP 402
 - Rate limits: 30 calls/min global, 20 calls/min per-user (enforced inside `_BUDGET_LOCK` with atomic reservation — see R14)
 
-Residual: Token-based estimation is approximate; actual Anthropic billing may differ.
+Residual: Token-based estimation is approximate; actual the LLM provider billing may differ.
 
 ---
 
@@ -118,12 +118,12 @@ Residual: Only email-based throttling; no IP-based rate limiting at the applicat
 
 ### R8: Prompt Injection
 
-Malicious input manipulates Claude or extracts internal instructions.
+Malicious input manipulates the AI or extracts internal instructions.
 
 - `scan_input()` in `safety.py` checks 15 compiled regex patterns (instruction override, role manipulation, system prompt extraction, known exploits)
 - Risk scoring: 40 pts per injection match, 20 per PII type, 15 for length warning (>80% of 10k char max), 100 for length exceeded
 - Block threshold: risk >= 80; raises `PromptSafetyError` (HTTP 422); logged as `blocked_safety`
-- `scan_output()` detects model refusal patterns in Claude responses
+- `scan_output()` detects model refusal patterns in the AI responses
 
 Residual: Regex-based detection cannot catch novel or obfuscated injection techniques.
 
@@ -197,7 +197,7 @@ Residual: A public hostname that an attacker controls could still be used to exf
 Concurrent callers race past `_check_budget()` — all observe the count below the limit simultaneously and all proceed, collectively exceeding daily budget and per-minute rate limits.
 
 - `app/services/llm_client.py::_make_api_call()` holds `_BUDGET_LOCK` around the check AND an atomic reservation INSERT into `api_usage_log` with `status="reserved"` and a worst-case cost estimate. Subsequent callers observe the reservation row and back off.
-- The actual Anthropic API call happens OUTSIDE the lock so slow calls don't block other evaluators.
+- The actual the LLM provider API call happens OUTSIDE the lock so slow calls don't block other evaluators.
 - `_finalize_reservation()` updates the reserved row with real tokens/cost/status (success, error_timeout, error_rate_limit, etc.) when the API call returns.
 
 Residual: Single-process lock only — multi-worker deployments would need Redis INCR+TTL or a DB-native advisory lock. Documented inline in `llm_client.py`.
@@ -221,13 +221,13 @@ Residual: 10000-row cap is still finite. Windows spanning years of high-activity
 
 ### R16: LLM Judge Refusal Misread as Score
 
-`score_factuality()` and `detect_hallucination()` used `re.search(r"\d+", text)` which matched any digit anywhere in the response. A Claude refusal like "I cannot rate this. 404 Not Found" parsed as 404 → clamped to 100 → "severe hallucination" alert on a refusal. "I can give you 7 reasons why not" parsed as 7 → factuality 7% → false drift.
+`score_factuality()` and `detect_hallucination()` used `re.search(r"\d+", text)` which matched any digit anywhere in the response. A the AI refusal like "I cannot rate this. 404 Not Found" parsed as 404 → clamped to 100 → "severe hallucination" alert on a refusal. "I can give you 7 reasons why not" parsed as 7 → factuality 7% → false drift.
 
 - `app/services/llm_client.py::_parse_judge_score()` uses `re.fullmatch` — ONLY a bare integer (optionally whitespace or trailing decimals) counts as a score.
 - Both judge functions now return `Optional[float]` — `None` when the judge refuses or returns non-numeric content.
 - The eval harness flags such results as `status="judge_refused"` and EXCLUDES them from the aggregate quality score, so a flaky judge cannot spuriously trip drift on an otherwise-healthy service.
 
-Residual: A consistently refusing judge would produce evals where most rows have no score. The aggregate quality stays stable, but the drift detector has less signal. Operators investigating repeated `judge_refused` should check the prompt or Claude's policy updates.
+Residual: A consistently refusing judge would produce evals where most rows have no score. The aggregate quality stays stable, but the drift detector has less signal. Operators investigating repeated `judge_refused` should check the prompt or the AI's policy updates.
 
 ---
 
@@ -245,7 +245,7 @@ Residual: A determined admin who writes "looks fine lgtm approved moving on" pas
 
 ### R18: Unredacted prompt/response text in APIUsageLog
 
-`APIUsageLog.prompt_text` and `APIUsageLog.response_text` store up to 2000 chars of the exact Claude input/output on every call. A user prompt containing PII is persisted verbatim even when `scan_input` flagged `pii_detected`. The same text surfaces in the Settings → Call Trace UI and in DB backups.
+`APIUsageLog.prompt_text` and `APIUsageLog.response_text` store up to 2000 chars of the exact the AI input/output on every call. A user prompt containing PII is persisted verbatim even when `scan_input` flagged `pii_detected`. The same text surfaces in the Settings → Call Trace UI and in DB backups.
 
 - Row is populated by `_finalize_reservation()` in `llm_client.py` on every call (success or error).
 - Truncation at `[:2000]` is silent — no column indicates truncation.

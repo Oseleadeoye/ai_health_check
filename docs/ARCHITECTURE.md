@@ -4,7 +4,7 @@
 
 ## 1. System Overview
 
-AI Health Check is a centralized AI operations platform built for the ARTI-409-A course. The frontend is a React 18 SPA (Vite 5 + Tailwind 3.4). The backend is FastAPI with SQLAlchemy ORM over SQLite. All LLM calls use Anthropic Claude Sonnet 4.6 (`claude-sonnet-4-6`) via the `anthropic>=0.49.0` SDK, routed through a single pipeline in `llm_client.py`. Two APScheduler jobs run in the background: an HTTP health-check probe against every service every 5 min, and an automated eval run against every active non-confidential service with test cases every 60 min.
+AI Health Check is a centralized AI operations platform built for the ARTI-409-A course. The frontend is a React 18 SPA (Vite 5 + Tailwind 3.4). The backend is FastAPI with SQLAlchemy ORM over SQLite. All LLM calls use the LLM provider the AI Sonnet 4.6 (`claude-sonnet-4-6`) via the `anthropic>=0.49.0` SDK, routed through a single pipeline in `llm_client.py`. Two APScheduler jobs run in the background: an HTTP health-check probe against every service every 5 min, and an automated eval run against every active non-confidential service with test cases every 60 min.
 
 ## 2. Architecture Diagram
 
@@ -21,7 +21,7 @@ FastAPI Backend (7 routers, 47 endpoints)
     |
     |--- SQLite (SQLAlchemy ORM, 13 models, Alembic migrations)
     |
-    |--- Anthropic API — two-tier:
+    |--- the LLM provider API — two-tier:
     |       Sonnet 4.6  (actor: services under test + synthesis tasks)
     |       Haiku 4.5   (merged judge: factuality + hallucination in one call)
     |        ^
@@ -77,7 +77,7 @@ Compliance was split into three cohesive files mounted under the same
 
 | Module | Purpose |
 |--------|---------|
-| `llm_client.py` | Public Claude functions routed through `_make_api_call`. Atomic budget/rate-limit check + reservation under `_BUDGET_LOCK`; actual API call outside the lock. Judge-score parser (`_parse_judge_score`) uses `re.fullmatch` to reject refusals |
+| `llm_client.py` | Public the AI functions routed through `_make_api_call`. Atomic budget/rate-limit check + reservation under `_BUDGET_LOCK`; actual API call outside the lock. Judge-score parser (`_parse_judge_score`) uses `re.fullmatch` to reject refusals |
 | `safety.py` | Prompt scanner: 15 injection patterns, PII detection, toxicity checks (violence, bias, illegal content), length limits, risk scoring |
 | `url_validator.py` | SSRF guard: rejects non-http schemes and hostnames that resolve to loopback / RFC1918 / link-local (including AWS metadata 169.254.169.254) / multicast / reserved. Called at service register, update, probe, and scheduled health check |
 | `sensitivity.py` | `enforce_sensitivity()` gates LLM access on services labelled `confidential`. Non-admins blocked; admins require explicit `allow_confidential=true` override. Every attempt (allowed or denied) is audited |
@@ -90,7 +90,7 @@ Compliance was split into three cohesive files mounted under the same
 
 ## 4. LLM Client Pipeline
 
-All Anthropic API calls are centralized in `llm_client.py`. Two-tier model architecture:
+All the LLM provider API calls are centralized in `llm_client.py`. Two-tier model architecture:
 
 - **Actor — `settings.llm_model` (Sonnet 4.6 default):** the service under test and every synthesis task (incident summaries, dashboard insights, compliance reports).
 - **Judge — `settings.judge_model` (Haiku 4.5 default):** merged `judge_response` — one structured Haiku call per factuality test case returns `{factuality, hallucination}`. Different size/training emphasis from the actor narrows the "model scoring itself" correlation. The earlier split `score_factuality` + `detect_hallucination` pair was merged in commit `0fbddac` to halve judge traffic.
@@ -279,7 +279,7 @@ Every 403 denial is itself written to `audit_log` as a `role_denied` event with 
 
 ### Retry with Exponential Backoff
 
-- 2 retries for transient Anthropic errors (timeouts, 429, 5xx).
+- 2 retries for transient the LLM provider errors (timeouts, 429, 5xx).
 - Backoff formula: `2^attempt + random(0, 0.5)` seconds.
 - Non-retryable errors (AuthenticationError, BadRequestError) fail immediately.
 
@@ -306,9 +306,9 @@ This is the canonical settings table. All settings are in `backend/app/config.py
 | `health_check_schedule_minutes` | 5 | Scheduling |
 | `api_daily_budget` | 5.0 | Budget |
 | `api_monthly_budget` | 25.0 | Budget |
-| `api_max_calls_per_minute` | 30 | Rate Limiting — sized for demo eval batches (a 10-case factuality run fires ~20 Claude calls: 10 actor + 10 merged judge, plus headroom for concurrent UI activity) |
+| `api_max_calls_per_minute` | 30 | Rate Limiting — sized for demo eval batches (a 10-case factuality run fires ~20 the AI calls: 10 actor + 10 merged judge, plus headroom for concurrent UI activity) |
 | `api_max_calls_per_user_per_minute` | 20 | Rate Limiting — per-user portion of the global budget; enforced inside `_BUDGET_LOCK` with atomic reservation (see `llm_client.py::_make_api_call`) |
-| `hard_max_cost_per_call_usd` | 0.05 | Hard cap — rejects a Claude call BEFORE the network if its worst-case cost exceeds this ceiling |
+| `hard_max_cost_per_call_usd` | 0.05 | Hard cap — rejects a the AI call BEFORE the network if its worst-case cost exceeds this ceiling |
 | `hard_max_tokens_per_call` | 2000 | Hard cap — ceiling on `max_tokens` regardless of caller; blocks a bug asking for 100 k tokens |
 | `hard_max_prompt_chars` | 12000 | Hard cap — ceiling on input length, checked before tokenisation |
 | `app_name` | `AI Health Check` | Application |

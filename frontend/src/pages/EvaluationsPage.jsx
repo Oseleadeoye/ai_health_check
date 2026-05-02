@@ -32,6 +32,10 @@ export default function EvaluationsPage() {
   // Eval-run confirmation. Holds the service + cost preview + confidential
   // flag between the "Run" click and the confirm action. Null when closed.
   const [runConfirm, setRunConfirm] = useState(null);
+  // Key that changes to force sub-components (like DriftAnalysis) to
+  // refresh their internal data fetching even if the selected ID hasn't
+  // changed (e.g. running an eval for the already-selected service).
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const showToast = (message, type = 'info') => setToast({ visible: true, message, type });
 
@@ -103,8 +107,9 @@ export default function EvaluationsPage() {
         `Quality: ${r.quality_score}% ${r.drift_flagged ? '— drift detected' : ''}`,
         r.drift_flagged ? 'error' : 'success',
       );
-      fetchData();
+      await fetchData();
       setSelectedDriftService(service.id);
+      setRefreshTrigger(prev => prev + 1);
     } catch (err) {
       showToast(err.response?.data?.detail || 'Evaluation failed', 'error');
     } finally {
@@ -179,7 +184,12 @@ export default function EvaluationsPage() {
 
       {/* Drift analysis */}
       {services.length > 0 && (
-        <DriftAnalysis services={services} selectedId={selectedDriftService} onSelect={setSelectedDriftService} />
+        <DriftAnalysis
+          services={services}
+          selectedId={selectedDriftService}
+          onSelect={setSelectedDriftService}
+          refreshTrigger={refreshTrigger}
+        />
       )}
 
       <TestCasesSection testCases={testCases} services={services} />

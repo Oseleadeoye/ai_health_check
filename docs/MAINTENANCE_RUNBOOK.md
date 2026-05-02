@@ -10,9 +10,9 @@
 
 **Trigger:** Average latency > 2000 ms or P95/P99 spike on the Performance page.
 
-**Check:** Test Connection on the affected service | Review `api_usage_log` for `error_timeout` entries | Check Anthropic status page.
+**Check:** Test Connection on the affected service | Review `api_usage_log` for `error_timeout` entries | Check the LLM provider status page.
 
-**Fix:** If Anthropic-wide, wait for recovery (retry logic handles transient failures) | If isolated to one service, verify model name and endpoint config | If >10s, set service to inactive temporarily.
+**Fix:** If the LLM provider-wide, wait for recovery (retry logic handles transient failures) | If isolated to one service, verify model name and endpoint config | If >10s, set service to inactive temporarily.
 
 **Prevent:** Monitor dashboard P95/P99 trends; APScheduler health checks run on a recurring interval.
 
@@ -46,7 +46,7 @@
 
 **Trigger:** Test Connection returns "failure" after exhausting 2 retries.
 
-**Check:** Test connection on multiple services | Check Anthropic status page | Review `api_usage_log` for `error_timeout`, `error_server`, `error_auth` and retry entries (`retry_0`, `retry_1`).
+**Check:** Test connection on multiple services | Check the LLM provider status page | Review `api_usage_log` for `error_timeout`, `error_server`, `error_auth` and retry entries (`retry_0`, `retry_1`).
 
 **Fix:** Use incident workflow without LLM (create incidents, fill checklists, write plans manually) | If outage >2h, create incident documenting impact.
 
@@ -166,9 +166,9 @@
 
 **Trigger:** `EvalRun.results` shows a growing proportion of `status="judge_refused"` rows, or drift alerts fire less frequently than expected despite visible quality issues.
 
-**Check:** Review the prompt template for `score_factuality` and `detect_hallucination` in [PROMPT_CHANGE_LOG.md](PROMPT_CHANGE_LOG.md) | Check Anthropic's policy updates (new refusal categories) | Inspect a sample of refused responses via `GET /dashboard/api-calls/{id}` to understand what Claude is refusing.
+**Check:** Review the prompt template for `score_factuality` and `detect_hallucination` in [PROMPT_CHANGE_LOG.md](PROMPT_CHANGE_LOG.md) | Check the provider's policy updates (new refusal categories) | Inspect a sample of refused responses via `GET /dashboard/api-calls/{id}` to understand what the AI is refusing.
 
-**Fix:** If the prompts are now mis-categorised by Claude (e.g. a benign test case triggers a safety refusal), rephrase the test case | If the judge prompt itself is being refused (unlikely — it's a rating task), prepend context explaining the evaluation purpose | If Anthropic has changed behaviour broadly, note the date in `PROMPT_CHANGE_LOG.md` and consider using a different model for the judge.
+**Fix:** If the prompts are now mis-categorised by the AI (e.g. a benign test case triggers a safety refusal), rephrase the test case | If the judge prompt itself is being refused (unlikely — it's a rating task), prepend context explaining the evaluation purpose | If the LLM provider has changed behaviour broadly, note the date in `PROMPT_CHANGE_LOG.md` and consider using a different model for the judge.
 
 **Prevent:** `_parse_judge_score()` returns `None` on refusal rather than misreading a number out of a refusal text. The eval harness excludes refused results from the aggregate quality score, so drift is not falsely triggered — but repeated refusals mean the quality signal is weaker.
 
@@ -213,4 +213,4 @@ Script updates only the rows whose env var is set, bcrypt-hashes the new passwor
 | Weekly | Review audit log, api_usage_log costs, api-safety metrics, and `confidential_llm_override` / `role_denied` events |
 | Weekly | Run audit log integrity verify (`/compliance/audit-log/verify`) — expect `valid: true` |
 | Monthly | Export compliance evidence (check for truncation warnings) |
-| Monthly | Review `judge_refused` rate and update judge prompts if Anthropic's refusal behaviour has shifted |
+| Monthly | Review `judge_refused` rate and update judge prompts if the provider's refusal behaviour has shifted |
